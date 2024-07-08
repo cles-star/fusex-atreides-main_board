@@ -1,9 +1,0 @@
-../Core/Src/bmp280.c:7:6:BMP280_CS_LOW	8	static
-../Core/Src/bmp280.c:10:6:BMP280_CS_HIGH	8	static
-../Core/Src/bmp280.c:14:9:bmp280_read_register	24	static
-../Core/Src/bmp280.c:26:6:bmp280_read_registers	32	static
-../Core/Src/bmp280.c:37:6:bmp280_read_calibration_data	40	static
-../Core/Src/bmp280.c:55:6:bmp280_init	24	static
-../Core/Src/bmp280.c:80:9:bmp280_compensate_T_int32	32	static
-../Core/Src/bmp280.c:89:10:bmp280_compensate_P_int64	328	static
-../Core/Src/bmp280.c:108:6:bmp280_read_temperature_and_pressure	40	static

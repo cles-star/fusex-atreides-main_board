@@ -57,10 +57,14 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define MPU6500_CS_Pin GPIO_PIN_4
-#define MPU6500_CS_GPIO_Port GPIOA
-#define BMP280_CS_Pin GPIO_PIN_0
+#define JACK_Pin GPIO_PIN_14
+#define JACK_GPIO_Port GPIOC
+#define En_telem_Pin GPIO_PIN_0
+#define En_telem_GPIO_Port GPIOB
+#define BMP280_CS_Pin GPIO_PIN_1
 #define BMP280_CS_GPIO_Port GPIOB
+#define MPU6500_CS_Pin GPIO_PIN_15
+#define MPU6500_CS_GPIO_Port GPIOA
 
 /* USER CODE BEGIN Private defines */
 
