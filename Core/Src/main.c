@@ -43,11 +43,13 @@
 #define GYRO_SENSITIVITY_SCALE_FACTOR 32.8
 #define TEMP_SCALE_FACTOR 100.0 //chatgpt, to be verify
 #define PRESSURE_SCALE_FACTOR 25600.0 // idem
-#define DATA_BUFFER_SIZE 30000
-#define ACQUISITION_DELAY 100 //ms
+#define DATA_BUFFER_SIZE 40000
+#define EXPE_DATA_SIZE 50
+#define ACQUISITION_DELAY 10 //ms
+#define MOTOR_DELAY 100 //ms
 #define WRITE_SD_DELAY 2000 //ms
 #define START_TELEM 5000 //ms
-#define STOP_TELEM 18000 //ms
+#define STOP_TELEM 180000 //ms
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -122,21 +124,6 @@ int main(void)
   process_SD_card(init_buffer);
   memset(init_buffer, 0, 100);
 
-  //Wait for jack connection
-  int jack = HAL_GPIO_ReadPin(GPIOA, JACK_Pin);
-  printf("Jack : %d\n", jack);
-
-  if (jack != 0){
-	 printf("No jack\n");
-
-	 while (HAL_GPIO_ReadPin(GPIOA, JACK_Pin) == GPIO_PIN_SET){
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, SET);
-		HAL_Delay(100);
-		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, RESET);
-	 }
-  }
-
-  printf("Jack detected\n");
 
   /* USER CODE END 2 */
 
@@ -144,85 +131,107 @@ int main(void)
   /* USER CODE BEGIN WHILE */
 
   char buffer[DATA_BUFFER_SIZE];
-  int launch = 0;
+  uint8_t bufferNano[EXPE_DATA_SIZE];
+  uint8_t launch = 0;
   int telem = 0;
+  uint8_t expe = 0;
 
-  while (1)
-  {
-	  if (HAL_GPIO_ReadPin(GPIOA, JACK_Pin) == GPIO_PIN_SET) {
-	        // Jack get removed
-	        launch = 1;
-	        printf("Launch !\n");
+  HAL_StatusTypeDef status;
+  printf("Starting\n");
+  do {
+	  status = HAL_UART_Receive(&huart1, &launch, 1, HAL_MAX_DELAY);
+	  printf("Jack\n");
+  } while (status != HAL_OK);  // Réessayer tant que la réception n'est pas réussie
+  printf("Launching !\n");
+  //launch = 1;
 
-	        // Démarrer le timer en mode interruption
-	        HAL_TIM_Base_Start_IT(&htim2);
-	  }
+  // Démarrer le timer en mode interruption
+  HAL_TIM_Base_Start_IT(&htim2);
 
-	  // Démarrer le timer en mode interruption
-	  HAL_TIM_Base_Start_IT(&htim2);
+  while (launch){
+	static uint32_t ackTick = 0;
+	static uint32_t sdTick = 0;
+	static uint32_t expeTick = 0;
+	static uint32_t currentTick = 0;
+	static int index = 0;
 
-	  while (launch){
-		static uint32_t ackTick = 0;
-		static uint32_t sdTick = 0;
-		static uint32_t currentTick = 0;
-		static int index = 0;
+	currentTick = HAL_GetTick();
 
-		currentTick = HAL_GetTick();
 
-		if ((currentTick-ackTick) > ACQUISITION_DELAY) {
+	status = HAL_UART_Receive(&huart1, bufferNano, EXPE_DATA_SIZE, HAL_MAX_DELAY);
 
-			int16_t accelData[3];
-			int16_t gyroData[3];
-			int32_t temperature;
-			uint32_t pressure;
+	if (status == HAL_OK) {
+		// Données reçues avec succès
+		int expe_data_size = sprintf(buffer+index,"%.50s\n", bufferNano);
+		index+=expe_data_size;
+	}
 
-			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, RESET);
-			// Lecture des données d'accélération et gryoscope du MP9250
-			MPU9250_ReadAccel(accelData, &hspi1);
-			MPU9250_ReadGyro(gyroData, &hspi1);
-			//Lecture de la température
-			bmp280_read_temperature_and_pressure(&bmp, &temperature, &pressure);
-			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, SET);
+	//datas recovering
+	if ((currentTick-ackTick) > ACQUISITION_DELAY) {
 
-			int accel_size = sprintf(buffer+index, "Accel_X: %.2f, Accel_Y: %.2f, Accel_Z: %.2f\n", (double)accelData[0]/ACCEL_SENSITIVITY_SCALE_FACTOR, (double)accelData[1]/ACCEL_SENSITIVITY_SCALE_FACTOR, (double)accelData[2]/ACCEL_SENSITIVITY_SCALE_FACTOR);
-			index += accel_size;
-			int gyro_size = sprintf(buffer+index, "Gyro_X: %.2f, Gyro_Y: %.2f, Gyro_Z: %.2f\n", (double)gyroData[0]/GYRO_SENSITIVITY_SCALE_FACTOR, (double)gyroData[1]/GYRO_SENSITIVITY_SCALE_FACTOR, (double)gyroData[2]/GYRO_SENSITIVITY_SCALE_FACTOR);
-			index+= gyro_size;
-			int bmp_data_size = sprintf(buffer+index, "Temperature: %.2f C, Pressure: %.2f hPa\n", temperature / TEMP_SCALE_FACTOR, pressure / PRESSURE_SCALE_FACTOR);
-			index+= bmp_data_size;
-			ackTick = currentTick;
+		int16_t accelData[3];
+		int16_t gyroData[3];
+		int32_t temperature;
+		uint32_t pressure;
 
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, RESET);
+		// Lecture des données d'accélération et gryoscope du MP9250
+		MPU9250_ReadAccel(accelData, &hspi1);
+		MPU9250_ReadGyro(gyroData, &hspi1);
+		//Lecture de la température
+		bmp280_read_temperature_and_pressure(&bmp, &temperature, &pressure);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, SET);
+
+		int accel_size = sprintf(buffer+index, "Accel_X: %.2f, Accel_Y: %.2f, Accel_Z: %.2f\n", (double)accelData[0]/ACCEL_SENSITIVITY_SCALE_FACTOR, (double)accelData[1]/ACCEL_SENSITIVITY_SCALE_FACTOR, (double)accelData[2]/ACCEL_SENSITIVITY_SCALE_FACTOR);
+		index += accel_size;
+		int gyro_size = sprintf(buffer+index, "Gyro_X: %.2f, Gyro_Y: %.2f, Gyro_Z: %.2f\n", (double)gyroData[0]/GYRO_SENSITIVITY_SCALE_FACTOR, (double)gyroData[1]/GYRO_SENSITIVITY_SCALE_FACTOR, (double)gyroData[2]/GYRO_SENSITIVITY_SCALE_FACTOR);
+		index+= gyro_size;
+		int bmp_data_size = sprintf(buffer+index, "Temperature: %.2f C, Pressure: %.2f hPa\n", temperature / TEMP_SCALE_FACTOR, pressure / PRESSURE_SCALE_FACTOR);
+		index+= bmp_data_size;
+		ackTick = currentTick;
+
+	}
+
+	if((currentTick-sdTick) > WRITE_SD_DELAY){
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, RESET);
+		if (telem) {
+			HAL_UART_Transmit(&huart2, (uint8_t*)buffer, index, HAL_MAX_DELAY);
 		}
+		process_SD_card(buffer);
+		HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, SET);
+		index = 0;
+		sdTick = currentTick;
+		memset(buffer, 0, DATA_BUFFER_SIZE);
+	}
 
-		if ((timer_ms > START_TELEM) && (timer_ms < STOP_TELEM)){
-			HAL_GPIO_WritePin(GPIOB, En_telem_Pin, SET);
-			telem = 1;
-		}
+	if((currentTick-expeTick) > MOTOR_DELAY && expe == 1){
+		//int16_t gyroData[3];
+		//MPU9250_ReadGyro(gyroData, &hspi1);
+		//int to_transmit = sprintf(bufferNano, "OK");
+		//int to_transmit = sprintf(bufferNano, "Test : %.2f/%.2f/%.2f\n", (double)gyroData[0]/GYRO_SENSITIVITY_SCALE_FACTOR, (double)gyroData[1]/GYRO_SENSITIVITY_SCALE_FACTOR, (double)gyroData[2]/GYRO_SENSITIVITY_SCALE_FACTOR);
+		HAL_UART_Transmit(&huart1, &expe, 1, HAL_MAX_DELAY);
 
-		if (timer_ms > STOP_TELEM) {
-			HAL_GPIO_WritePin(GPIOB, En_telem_Pin, RESET);
-			telem = 0 ;
-			launch = 0;
-		}
+		expeTick = currentTick;
+	}
 
-		if((currentTick-sdTick) > WRITE_SD_DELAY){
-			printf("%lu\n", timer_ms);
-			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, RESET);
-			if (telem) {
-				HAL_UART_Transmit(&huart2, (uint8_t*)buffer, index, HAL_MAX_DELAY);
-			}
-			process_SD_card(buffer);
-			HAL_GPIO_WritePin(GPIOC, GPIO_PIN_13, SET);
-			index = 0;
-			sdTick = currentTick;
-			memset(buffer, 0, DATA_BUFFER_SIZE);
-		}
+	if ((timer_ms > START_TELEM) && (timer_ms < STOP_TELEM)){
+		HAL_GPIO_WritePin(GPIOB, En_telem_Pin, SET);
+		telem = 1;
+		expe = 1;
+
+	}
+
+	if (timer_ms > STOP_TELEM) {
+		HAL_GPIO_WritePin(GPIOB, En_telem_Pin, RESET);
+		telem = 0 ;
+		launch = 0;
+		expe = 0;
+	}
     /* USER CODE END WHILE */
-
     /* USER CODE BEGIN 3 */
-  }
+    }
+    while (1);
   /* USER CODE END 3 */
- }
 }
 
 /**
